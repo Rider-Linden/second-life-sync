@@ -1,6 +1,8 @@
-# second-life-sync README
+This tool is not endorsed or maintained by Linden Lab. 
 
-This extension synchronizes Second Life temporary script files with a corresponding master script in your workspace. When a temporary file with a name like "sl_script_<name>_<uuid>.lsl" or ".luau" is opened, the extension automatically:
+# second-life-sync
+
+This extension synchronizes Second Life temporary script files with a corresponding master script in your workspace. When a temporary file with a name like `sl_script_<name>_<uuid>.lsl` or `.luau` is opened, the extension automatically:
 
 - Searches for a master file matching the script name (e.g. "<name>.lsl" or ".luau") in the current workspace.
 - Opens the master script in the editor, or changes focus to it.
