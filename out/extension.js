@@ -72,7 +72,7 @@ function activate(context) {
             activeSyncs.delete(tempFilePath);
         }
         // Look for a file in the workspace with the same name as the master script
-        vscode.workspace.findFiles(`**/${scriptName}.${extension}`, '**/node_modules/**').then(async (files) => {
+        vscode.workspace.findFiles(`**/${scriptName}.${extension}`).then(async (files) => {
             if (files.length === 0) {
                 vscode.window.showWarningMessage(`No master script found for: ${scriptName}.${extension}`);
                 return;
@@ -86,14 +86,54 @@ function activate(context) {
             // Set up a listener to copy the master file to the temp file when it's saved
             const saveListener = vscode.workspace.onDidSaveTextDocument((savedDoc) => {
                 if (savedDoc.fileName === masterPath) {
-                    fs.copyFile(masterPath, tempFilePath, (err) => {
-                        if (err) {
-                            vscode.window.showErrorMessage(`Failed to sync to temporary file: ${err.message}`);
+                    (async () => {
+                        try {
+                            const data = await fs.promises.readFile(masterPath, 'utf8');
+                            const wsFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0].uri.fsPath;
+                            if (!wsFolder) {
+                                vscode.window.showErrorMessage('No workspace folder found');
+                                return;
+                            }
+                            // Preprocess: set regex based on file extension
+                            let regex;
+                            if (extension.toLowerCase() === 'luau') {
+                                regex = /--\[\[\s*require\s*\(\s*(\S+)\s*\)\s*\]\]/g;
+                            }
+                            else if (extension.toLowerCase() === 'lsl') {
+                                regex = /\/\/\s*include\s+(\S+)/g;
+                            }
+                            else {
+                                regex = /a^/; // regex that matches nothing
+                            }
+                            const matches = Array.from(data.matchAll(regex));
+                            let processedContent = data;
+                            for (const match of matches) {
+                                const directive = match[0];
+                                let includeName = match[1];
+                                // If includeName does not have an extension, add the master file's extension.
+                                if (path.extname(includeName) === '') {
+                                    includeName = includeName + '.' + extension;
+                                }
+                                //const includeUris = await vscode.workspace.findFiles(`**/include/${includeName}`, undefined, 1);
+                                let includeGlob = '**/include/' + includeName;
+                                const includeUris = await vscode.workspace.findFiles(includeGlob, undefined, 1);
+                                if (includeUris.length > 0) {
+                                    const includeContent = await fs.promises.readFile(includeUris[0].fsPath, 'utf8');
+                                    processedContent = processedContent.replace(directive, includeContent);
+                                }
+                                else {
+                                    vscode.window.showWarningMessage(`Include file include/${includeName} not found`);
+                                    // If not found, leave the directive unchanged.
+                                    processedContent = processedContent.replace(directive, directive);
+                                }
+                            }
+                            await fs.promises.writeFile(tempFilePath, processedContent);
+                            vscode.window.setStatusBarMessage(`Synced ${scriptName} to Second Life with includes`, 3000);
                         }
-                        else {
-                            vscode.window.setStatusBarMessage(`Synced ${scriptName} to Second Life`, 3000);
+                        catch (err) {
+                            vscode.window.showErrorMessage(`Error syncing file: ${err.message}`);
                         }
-                    });
+                    })();
                 }
             });
             // Watch for deletion and recreation of the temp file
